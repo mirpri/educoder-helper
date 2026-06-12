@@ -1,0 +1,6 @@
+# Netscape HTTP Cookie File
+# https://curl.haxx.se/rfc/cookie_spec.html
+# This is a generated file! Do not edit.
+
+.educoder.net	TRUE	/	FALSE	1234567890	autologin_trustie	0123456789abcdef0123456789abcdef01234567
+.educoder.net	TRUE	/	FALSE	1234567890	_educoder_session	0123456789abcdef0123456789abcdef
