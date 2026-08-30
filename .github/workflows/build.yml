@@ -1,0 +1,105 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            rust-targets: x86_64-pc-windows-msvc
+            tauri-target: x86_64-pc-windows-msvc
+            artifact-name: educoder-helper-x86_64.exe
+            artifact-path: src-tauri/target/x86_64-pc-windows-msvc/release/educoder-helper-gui.exe
+          - platform: windows-latest
+            rust-targets: aarch64-pc-windows-msvc
+            tauri-target: aarch64-pc-windows-msvc
+            artifact-name: educoder-helper-aarch64.exe
+            artifact-path: src-tauri/target/aarch64-pc-windows-msvc/release/educoder-helper-gui.exe
+          - platform: macos-latest
+            rust-targets: x86_64-apple-darwin,aarch64-apple-darwin
+            tauri-target: universal-apple-darwin
+            artifact-name: educoder-helper-universal
+            artifact-path: src-tauri/target/universal-apple-darwin/release/educoder-helper-gui
+          - platform: ubuntu-22.04
+            rust-targets: x86_64-unknown-linux-gnu
+            tauri-target: x86_64-unknown-linux-gnu
+            artifact-name: educoder-helper-x86_64-linux
+            artifact-path: src-tauri/target/x86_64-unknown-linux-gnu/release/educoder-helper-gui
+
+    runs-on: ${{ matrix.platform }}
+
+    defaults:
+      run:
+        working-directory: gui
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Node.js ──────────────────────────────────────────────
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: gui/package-lock.json
+
+      # ── Rust ─────────────────────────────────────────────────
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gui/src-tauri -> target
+
+      # ── Linux system deps (Tauri v2) ────────────────────────
+      - name: Install Linux dependencies
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev
+
+      # ── Frontend deps ───────────────────────────────────────
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # ── Build (no-bundle → single binary) ──────────────────
+      - name: Build Tauri app
+        run: npx tauri build --target ${{ matrix.tauri-target }} --no-bundle
+
+      # ── Stage binary at repo root for release ───────────────
+      - name: Stage binary for release
+        shell: bash
+        run: |
+          mkdir -p ../upload
+          if [ ! -f "${{ matrix.artifact-path }}" ]; then
+            echo "::error::Expected binary not found at gui/${{ matrix.artifact-path }}"
+            ls -lR "$(dirname "${{ matrix.artifact-path }}")" || true
+            exit 1
+          fi
+          cp "${{ matrix.artifact-path }}" "../upload/${{ matrix.artifact-name }}"
+
+      # ── Upload artifacts ────────────────────────────────────
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          draft: true
+          files: upload/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

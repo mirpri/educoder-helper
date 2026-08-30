@@ -168,7 +168,12 @@ export default function Account() {
               </button>
               <button
                 className="btn btn-danger"
-                onClick={() => void run("clear", async () => "已退出登录")}
+                onClick={() =>
+                  void run("clear", async () => {
+                    await api.clearCookies();
+                    return "已退出登录";
+                  })
+                }
                 disabled={!!busy}
               >
                 <Trash2 size={14} /> 退出登录
@@ -184,81 +189,85 @@ export default function Account() {
         )}
       </section>
 
-      <section className="card card-hero">
-        <div className="card-head">
-          <h2>方式一 · 浏览器登录（推荐）</h2>
-          <Badge tone="ok">最省事</Badge>
-        </div>
-        <p className="muted">
-          点击后会打开一个 educoder.net 的登录窗口。像平常一样登录（账号密码、验证码、第三方登录都可以），
-          成功后本应用会自动读取该窗口的登录凭证并关闭它 —— 不需要装扩展，也不用复制粘贴任何东西。
-        </p>
-        <div className="btn-row">
-          <button className="btn btn-primary btn-lg" onClick={() => void login()} disabled={!!busy}>
-            {waitingLogin ? <Spinner /> : <LogIn size={16} />}
-            {waitingLogin ? "等待登录完成…" : "打开登录窗口"}
-          </button>
-          {waitingLogin ? (
-            <button
-              className="btn"
-              onClick={() => {
-                void api.closeLoginWindow();
-                setWaitingLogin(false);
-              }}
-            >
-              取消
-            </button>
-          ) : null}
-        </div>
-        <p className="muted small">
-          凭证会以 cookies.txt 格式写入本应用的配置目录，命令行工具可通过{" "}
-          <span className="mono">$EDUCODER_COOKIES</span> 指向同一个文件。
-        </p>
-      </section>
+      {!status?.loaded ? (
+        <>
+          <section className="card card-hero">
+            <div className="card-head">
+              <h2>方式一 · 浏览器登录（推荐）</h2>
+              <Badge tone="ok">最省事</Badge>
+            </div>
+            <p className="muted">
+              点击后会打开一个 educoder.net 的登录窗口。像平常一样登录（账号密码、验证码、第三方登录都可以），
+              成功后本应用会自动读取该窗口的登录凭证并关闭它 —— 不需要装扩展，也不用复制粘贴任何东西。
+            </p>
+            <div className="btn-row">
+              <button className="btn btn-primary btn-lg" onClick={() => void login()} disabled={!!busy}>
+                {waitingLogin ? <Spinner /> : <LogIn size={16} />}
+                {waitingLogin ? "等待登录完成…" : "打开登录窗口"}
+              </button>
+              {waitingLogin ? (
+                <button
+                  className="btn"
+                  onClick={() => {
+                    void api.closeLoginWindow();
+                    setWaitingLogin(false);
+                  }}
+                >
+                  取消
+                </button>
+              ) : null}
+            </div>
+            <p className="muted small">
+              凭证会以 cookies.txt 格式写入本应用的配置目录，命令行工具可通过{" "}
+              <span className="mono">$EDUCODER_COOKIES</span> 指向同一个文件。
+            </p>
+          </section>
 
-      <details className="card card-collapsible">
-        <summary>
-          <span className="card-summary-title">其他登录方式</span>
-          <span className="muted small">已经有 cookies.txt，或想手动粘贴</span>
-        </summary>
+          <details className="card card-collapsible">
+            <summary>
+              <span className="card-summary-title">其他登录方式</span>
+              <span className="muted small">已经有 cookies.txt，或想手动粘贴</span>
+            </summary>
 
-        <div className="card-body">
-          <h3>
-            <FileText size={15} /> 方式二 · 选择 cookies.txt
-          </h3>
-          <p className="muted">
-            用浏览器扩展 <span className="mono">Get cookies.txt LOCALLY</span> 在已登录的 educoder.net
-            页面导出。选定后路径会被记住，下次启动自动载入。
-          </p>
-          <div className="btn-row">
-            <button className="btn" onClick={() => void pickFile()} disabled={!!busy}>
-              {busy === "file" ? <Spinner /> : <FileText size={14} />} 选择文件…
-            </button>
-          </div>
+            <div className="card-body">
+              <h3>
+                <FileText size={15} /> 方式二 · 选择 cookies.txt
+              </h3>
+              <p className="muted">
+                用浏览器扩展 <span className="mono">Get cookies.txt LOCALLY</span> 在已登录的 educoder.net
+                页面导出。选定后路径会被记住，下次启动自动载入。
+              </p>
+              <div className="btn-row">
+                <button className="btn" onClick={() => void pickFile()} disabled={!!busy}>
+                  {busy === "file" ? <Spinner /> : <FileText size={14} />} 选择文件…
+                </button>
+              </div>
 
-          <h3>
-            <ClipboardPaste size={15} /> 方式三 · 直接粘贴
-          </h3>
-          <Field
-            label="Cookie 内容"
-            hint="支持 Netscape cookies.txt 全文，也支持从开发者工具复制的 Cookie 请求头（a=1; b=2）。必须包含 _educoder_session。"
-          >
-            <textarea
-              className="input textarea mono"
-              rows={4}
-              placeholder="_educoder_session=…; autologin_trustie=…"
-              value={paste}
-              onChange={(e) => setPaste(e.target.value)}
-              spellCheck={false}
-            />
-          </Field>
-          <div className="btn-row">
-            <button className="btn" onClick={() => void usePaste()} disabled={!!busy || !paste.trim()}>
-              {busy === "paste" ? <Spinner /> : <ClipboardPaste size={14} />} 使用这段 Cookie
-            </button>
-          </div>
-        </div>
-      </details>
+              <h3>
+                <ClipboardPaste size={15} /> 方式三 · 直接粘贴
+              </h3>
+              <Field
+                label="Cookie 内容"
+                hint="支持 Netscape cookies.txt 全文，也支持从开发者工具复制的 Cookie 请求头（a=1; b=2）。必须包含 _educoder_session。"
+              >
+                <textarea
+                  className="input textarea mono"
+                  rows={4}
+                  placeholder="_educoder_session=…; autologin_trustie=…"
+                  value={paste}
+                  onChange={(e) => setPaste(e.target.value)}
+                  spellCheck={false}
+                />
+              </Field>
+              <div className="btn-row">
+                <button className="btn" onClick={() => void usePaste()} disabled={!!busy || !paste.trim()}>
+                  {busy === "paste" ? <Spinner /> : <ClipboardPaste size={14} />} 使用这段 Cookie
+                </button>
+              </div>
+            </div>
+          </details>
+        </>
+      ) : null}
 
       {note ? <Notice>{note}</Notice> : null}
       {error ? <ErrorBox error={error} /> : null}
