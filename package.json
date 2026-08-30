@@ -1,14 +1,16 @@
 {
   "name": "educoder-helper",
   "version": "1.0.0",
-  "description": "Authenticated client + CLI for the EduCoder (educoder.net) API. Handles cookie auth, request signing, server-time alignment and redirects.",
+  "description": "Authenticated client, CLI and Tauri desktop GUI for the EduCoder (educoder.net) API. Handles cookie auth, request signing, server-time alignment and redirects.",
   "type": "module",
   "main": "index.js",
   "bin": {
     "edu": "bin/edu.js"
   },
   "scripts": {
-    "edu": "node bin/edu.js"
+    "edu": "node bin/edu.js",
+    "gui": "npm --prefix gui start",
+    "gui:build": "npm --prefix gui run bundle"
   },
   "engines": {
     "node": ">=18"

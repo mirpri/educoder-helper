@@ -1,19 +1,67 @@
 # EduCoder Helper
 
-用于 [EduCoder](https://www.educoder.net)（头歌）平台的信息查询与导出工具。需要 Node ≥ 18，无第三方依赖。
+用于 [EduCoder](https://www.educoder.net)（头歌）平台的信息查询与导出工具。
 
-## Cookies
+提供两种用法，功能覆盖一致：
 
-为使用本工具，需要将 `educoder.net` 的 Cookie 导出为 Netscape 格式的 `cookies.txt`。
-推荐使用浏览器扩展 [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)：登录 `educoder.net` 后，在该站点页面点击扩展图标导出，将得到的文件保存为 `cookies.txt`。
+| | 说明 | 运行要求 |
+| --- | --- | --- |
+| **命令行 / 库** | `edu` 命令与 `EduClient` 类 | Node ≥ 18，无第三方依赖 |
+| **桌面 GUI** | 基于 [Tauri](https://tauri.app) 的图形界面，见 [`gui/`](gui/) | 单个可执行文件，无需安装 Node |
 
-文件按以下优先级查找：
+## 登录凭证
+
+两种用法都用你浏览器里的 `educoder.net` 登录凭证访问接口，不涉及密码。
+
+**GUI**：在「账号」页点「打开登录窗口」，在弹出的 educoder.net 页面里正常登录
+（账号密码、验证码、第三方登录都可以）。登录成功后应用会自动读取该窗口的 Cookie 并关闭它，
+无需安装扩展或复制粘贴。凭证会以 `cookies.txt` 格式写入应用配置目录，下次启动自动载入。
+
+**CLI / 库**：需要一份 Netscape 格式的 `cookies.txt`。可以直接复用 GUI 写出的那一份
+（把 `$EDUCODER_COOKIES` 指向它，或在 GUI 里「另存为 cookies.txt」），
+也可以用浏览器扩展
+[Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc)
+自行导出。查找优先级：
 
 1. `--cookies <file>`（CLI）/ `new EduClient({ cookiesPath })`（库）
 2. `$EDUCODER_COOKIES` 环境变量
 3. 项目根目录下的 `./cookies.txt`
 
-Session Cookie 会定期过期，若请求返回登录重定向或 401，请重新导出。
+Session Cookie 会定期过期，若请求返回登录重定向或 401，GUI 里重新登录一次、CLI 重新导出即可。
+
+## 桌面 GUI
+
+```bash
+cd gui
+npm install
+npm start          # 开发模式（tauri dev）
+npm run bundle     # 打包（tauri build）
+```
+
+打包产物有两个，都在 `gui/src-tauri/target/release/` 下：
+
+| 产物 | 路径 | 说明 |
+| --- | --- | --- |
+| **单文件 exe** | `educoder-helper-gui.exe` | 约 8 MB，双击即用，可直接拷走 |
+| 安装程序 | `bundle/nsis/EduCoder Helper_1.0.0_<arch>-setup.exe` | 写开始菜单快捷方式、支持卸载 |
+
+单文件 exe 不含任何外部依赖，只要求系统有 WebView2 运行时（Windows 10/11 默认自带）。
+打包出的架构跟随构建机；要给别的架构出包，先 `rustup target add <target>`，
+再 `npm run bundle -- --target <target>`（如 `x86_64-pc-windows-msvc`）。
+
+开发/打包需要 [Rust 工具链](https://rustup.rs)；最终用户只需要打包产物，不需要 Rust 或 Node。
+界面分为五页，与 CLI 命令一一对应：
+
+| 页面 | 对应命令 |
+| --- | --- |
+| 账号 | 浏览器登录、`me`、凭证的导入 / 导出 / 清除 |
+| 浏览 | `courses` → `homeworks` → `challenges` → `task` / `code`，以及 `enter` |
+| 导出 | `export challenge` / `export shixun` / `export course`，带实时日志与取消 |
+| 报告 | `report` |
+| API | `get` / `post` / `raw` |
+
+GUI 的后端是 Node 核心逻辑（签名、Cookie、客户端、导出器）的 Rust 移植，详见
+[`gui/README.md`](gui/README.md)。
 
 ## 命令行用法
 
@@ -88,13 +136,18 @@ const { status, body } = await edu.request('GET', '/api/...', { raw: true });
 ## 目录结构
 
 ```
-edu/
-  bin/edu.js     CLI 入口
-  src/client.js  EduClient（认证、签名、便捷方法）
-  src/sign.js    签名算法及 ak/sk 常量
-  src/cookies.js cookies.txt 加载与路径解析
-  src/exporter.js 导出实训代码与任务描述
-  index.js       库导出
+educoder-helper/
+  bin/edu.js        CLI 入口
+  src/client.js     EduClient（认证、签名、便捷方法）
+  src/sign.js       签名算法及 ak/sk 常量
+  src/cookies.js    cookies.txt 加载与路径解析
+  src/exporter.js   导出实训代码与任务描述
+  src/pretty.js     CLI 默认输出的中文摘要格式化
+  index.js          库导出
+
+  gui/              Tauri 桌面应用
+    src/            React + TypeScript 前端
+    src-tauri/src/  Rust 后端（上述 src/*.js 的移植）
 ```
 
 ## 免责声明
