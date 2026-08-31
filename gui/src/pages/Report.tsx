@@ -101,7 +101,7 @@ export default function Report() {
                     <li key={i} className="row">
                       <div className="row-main">
                         <div className="row-title">
-                          <span className="pos">第{s.challenge_num ?? i + 1}关</span>
+                          <span className="pos">{s.challenge_num ?? i + 1}</span>
                           {s.name}
                           {s.game_score != null ? (
                             <Badge tone={s.game_score > 0 ? "ok" : "neutral"}>{s.game_score} 分</Badge>

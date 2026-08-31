@@ -57,7 +57,7 @@ src-tauri/src/             后端（Rust）
 | `sign.rs` | `src/sign.js` | 同一套 ak/sk 与签名算法 |
 | `cookies.rs` | `src/cookies.js` | 解析逻辑一致，另支持粘贴 `Cookie:` 请求头并写回 cookies.txt |
 | `client.rs` | `src/client.js` | 同样的请求头、时钟对齐与接口封装 |
-| `exporter.rs` | `src/exporter.js` | 同样的目录结构与文件名清洗规则 |
+| `exporter.rs` | `src/exporter.js` | 同样的目录结构、文件名清洗规则与图片改写 |
 
 `cargo test` 里的用例锁定了两处最容易漂移的行为——签名结果和 `sanitize()`
 的文件名清洗（期望值取自 Node 实现的实际输出），**修改任一侧时请同步另一侧并跑测试**。
@@ -70,6 +70,11 @@ src-tauri/src/             后端（Rust）
   在 Windows 上从 UI 线程读 Cookie 会让 WebView2 死锁（wry#583）。结果通过
   `login:success` / `login:closed` / `login:timeout` / `login:error` 事件回报。
 - 导出时支持取消（`Progress` 中的 `AtomicBool`），并通过 `export:log` 事件流式输出进度。
+- 任务描述里的 `/api/attachments/…` 是站内相对路径，落到磁盘上就是裂图。`ImageMode`
+  决定怎么修：`Link` 改写成绝对 URL，`Download` 抓到该关的 `images/` 再改成相对路径，
+  `Keep` 不动。这些附件不需要登录也能取，两种修法都成立。扫描不用正则（避免多一个
+  依赖）：`attachment_spans` 手工定位每个 URL 的字节区间，`splice` 一次性重建字符串——
+  逐个 `replace` 会让短 id 命中长 id 替换结果的内部。
 - 导出写文件时拒绝越界路径（`safe_join`），避免接口返回的路径写到目标目录之外。
 - 返回 HTML 而非 JSON 时识别为登录态过期，提示重新导入 Cookie，而不是把 HTML 当数据展示。
 

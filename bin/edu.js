@@ -2,7 +2,7 @@
 // EduCoder 命令行工具。
 import fs from 'node:fs';
 import { EduClient } from '../src/client.js';
-import { exportChallenge, exportShixun, exportCourse } from '../src/exporter.js';
+import { exportChallenge, exportShixun, exportCourse, IMAGE_MODES, DEFAULT_IMAGE_MODE } from '../src/exporter.js';
 import * as pretty from '../src/pretty.js';
 
 const USAGE = `edu - EduCoder API 命令行工具
@@ -30,6 +30,10 @@ const USAGE = `edu - EduCoder API 命令行工具
   --cookies <file>   cookies.txt 路径（否则取 $EDUCODER_COOKIES / ./cookies.txt）。
   --pretty           输出人类可读的中文摘要（默认）。
   --raw              输出完整 JSON；对 get/post/raw 则为原始响应体。
+  --images <mode>    导出时如何处理任务描述里的图片（默认 link）：
+                       keep     保持原样（站内相对路径，本地打开看不到图）
+                       link     改写为 educoder.net 绝对链接（联网即可显示）
+                       download 下载到 images/ 子目录并改为相对路径（可离线）
 
 示例:
   edu courses
@@ -38,11 +42,12 @@ const USAGE = `edu - EduCoder API 命令行工具
 `;
 
 function parseArgs(argv) {
-  const opts = { cookies: undefined, raw: false };
+  const opts = { cookies: undefined, raw: false, images: DEFAULT_IMAGE_MODE };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--cookies') opts.cookies = argv[++i];
+    else if (a === '--images') opts.images = argv[++i];
     else if (a === '--raw') opts.raw = true;
     else if (a === '--pretty') opts.raw = false;
     else if (a === '--desc') opts.desc = true;
@@ -67,6 +72,9 @@ async function main() {
   const { opts, rest } = parseArgs(process.argv.slice(2));
   const [cmd, ...args] = rest;
   if (!cmd || opts.help) { process.stdout.write(USAGE); return; }
+  if (!IMAGE_MODES.includes(opts.images)) {
+    throw new Error(`--images must be one of: ${IMAGE_MODES.join(' | ')}`);
+  }
 
   const client = new EduClient({ cookiesPath: opts.cookies });
   const reqOpts = opts.raw ? { raw: true } : {};
@@ -120,15 +128,15 @@ async function main() {
       const log = (m) => process.stderr.write(m + '\n');
       if (level === 'challenge') {
         if (!id) throw new Error('export challenge needs <gameId>');
-        const r = await exportChallenge(client, id, dir, log);
+        const r = await exportChallenge(client, id, dir, log, { images: opts.images });
         present({ exported: r.dir, ...r }, pretty.exportChallenge);
       } else if (level === 'shixun') {
         if (!id) throw new Error('export shixun needs <myshixunId>');
-        const r = await exportShixun(client, id, dir, log);
+        const r = await exportShixun(client, id, dir, log, { images: opts.images });
         present({ exported: r.dir, challenges: r.challenges.length }, pretty.exportShixun);
       } else if (level === 'course') {
         if (!id) throw new Error('export course needs <courseId>');
-        const r = await exportCourse(client, id, dir, {}, log);
+        const r = await exportCourse(client, id, dir, { images: opts.images }, log);
         present({ exported: r.dir, summary: r.summary }, pretty.exportCourse);
       } else {
         throw new Error('export level must be: challenge | shixun | course');

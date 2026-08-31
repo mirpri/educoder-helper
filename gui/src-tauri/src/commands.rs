@@ -10,7 +10,9 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder
 use crate::client::RawResponse;
 use crate::cookies::{self, Jar};
 use crate::error::{Error, Result};
-use crate::exporter::{self, ChallengeResult, CourseResult, Progress, ShixunResult};
+use crate::exporter::{
+    self, ChallengeResult, CourseResult, ImageMode, Progress, ShixunResult,
+};
 use crate::state::{self, AppState, Config, CookieStatus};
 
 // ---- Account / cookies ----
@@ -292,9 +294,12 @@ pub async fn export_challenge(
     game_id: String,
     dest: String,
     name: Option<String>,
+    images: Option<ImageMode>,
 ) -> Result<ChallengeResult> {
+    let images = images.unwrap_or_default();
     with_export(&app, &state, |client, p| async move {
-        exporter::export_challenge(&client, &game_id, Path::new(&dest), name.as_deref(), &p).await
+        exporter::export_challenge(&client, &game_id, Path::new(&dest), name.as_deref(), images, &p)
+            .await
     })
     .await
 }
@@ -307,9 +312,19 @@ pub async fn export_shixun(
     myshixun_id: String,
     dest: String,
     name: Option<String>,
+    images: Option<ImageMode>,
 ) -> Result<ShixunResult> {
+    let images = images.unwrap_or_default();
     with_export(&app, &state, |client, p| async move {
-        exporter::export_shixun(&client, &myshixun_id, Path::new(&dest), name.as_deref(), &p).await
+        exporter::export_shixun(
+            &client,
+            &myshixun_id,
+            Path::new(&dest),
+            name.as_deref(),
+            images,
+            &p,
+        )
+        .await
     })
     .await
 }
@@ -323,11 +338,21 @@ pub async fn export_course(
     dest: String,
     name: Option<String>,
     enter_if_needed: Option<bool>,
+    images: Option<ImageMode>,
 ) -> Result<CourseResult> {
     let enter = enter_if_needed.unwrap_or(true);
+    let images = images.unwrap_or_default();
     with_export(&app, &state, |client, p| async move {
-        exporter::export_course(&client, &course_id, Path::new(&dest), name.as_deref(), enter, &p)
-            .await
+        exporter::export_course(
+            &client,
+            &course_id,
+            Path::new(&dest),
+            name.as_deref(),
+            enter,
+            images,
+            &p,
+        )
+        .await
     })
     .await
 }

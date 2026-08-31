@@ -5,6 +5,12 @@ import { signature } from './sign.js';
 
 const HOST = 'www.educoder.net';
 
+// Content-Disposition filenames are sometimes percent-encoded, sometimes not
+// and sometimes malformed; a bad one must not abort an export.
+function decodeSafe(s) {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
 export class EduClient {
   /**
    * @param {object} [opts]
@@ -88,6 +94,27 @@ export class EduClient {
       throw e;
     }
     return data;
+  }
+
+  /**
+   * Signed GET returning raw bytes — attachments/images, which redirect to the
+   * object store. Returns { buffer, contentType, filename }; `filename` comes
+   * from Content-Disposition and is only good enough for its extension.
+   */
+  async getBinary(pathOrUrl) {
+    const url = pathOrUrl.startsWith('http') ? pathOrUrl : `https://${this.host}${pathOrUrl}`;
+    const res = await fetch(url, { method: 'GET', headers: await this._headers('GET'), redirect: 'follow' });
+    if (!res.ok) {
+      const e = new Error(`HTTP ${res.status} for GET ${url}`);
+      e.status = res.status;
+      throw e;
+    }
+    const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(res.headers.get('content-disposition') || '');
+    return {
+      buffer: Buffer.from(await res.arrayBuffer()),
+      contentType: (res.headers.get('content-type') || '').split(';')[0].trim(),
+      filename: m ? decodeSafe(m[1]) : '',
+    };
   }
 
   get(p, opts) { return this.request('GET', p, opts); }

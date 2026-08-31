@@ -24,6 +24,31 @@ pub struct RawResponse {
     pub body: String,
 }
 
+/// Raw bytes plus the two headers that say what they are.
+pub struct BinaryResponse {
+    pub bytes: Vec<u8>,
+    pub content_type: String,
+    pub filename: String,
+}
+
+/// Pulls the filename out of a `Content-Disposition`, tolerating the
+/// `filename*=UTF-8''name` form and the unquoted, semicolon-separated one
+/// EduCoder actually sends (`attachment;filename=image.png;attachment_id=1`).
+fn filename_from_disposition(header: &str) -> String {
+    for part in header.split(';') {
+        let part = part.trim();
+        let Some((key, value)) = part.split_once('=') else { continue };
+        let key = key.trim().to_ascii_lowercase();
+        if key != "filename" && key != "filename*" {
+            continue;
+        }
+        let value = value.trim().trim_matches('"');
+        let value = value.strip_prefix("UTF-8''").unwrap_or(value);
+        return value.to_string();
+    }
+    String::new()
+}
+
 /// Cheap to clone: the HTTP pool and the clock offset are shared, so cloning a
 /// client for one request does not re-sync the server clock.
 #[derive(Clone)]
@@ -205,6 +230,33 @@ impl EduClient {
 
     pub async fn get(&self, path: &str) -> Result<Value> {
         self.request("GET", path, None).await
+    }
+
+    /// Signed GET returning raw bytes — attachments/images, which redirect to
+    /// the object store. `filename` comes from Content-Disposition and is only
+    /// good enough for its extension.
+    pub async fn get_bytes(&self, path_or_url: &str) -> Result<BinaryResponse> {
+        let (resp, url) = self.send("GET", path_or_url, None).await?;
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(Error::http(
+                status.as_u16(),
+                format!("HTTP {} for GET {}", status.as_u16(), url),
+                None,
+            ));
+        }
+        let header = |name: reqwest::header::HeaderName| {
+            resp.headers().get(name).and_then(|v| v.to_str().ok()).unwrap_or("").to_string()
+        };
+        let content_type = header(reqwest::header::CONTENT_TYPE)
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let filename = filename_from_disposition(&header(reqwest::header::CONTENT_DISPOSITION));
+        let bytes = resp.bytes().await?.to_vec();
+        Ok(BinaryResponse { bytes, content_type, filename })
     }
 
     // ---- Convenience wrappers for common endpoints ----

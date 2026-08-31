@@ -108,10 +108,15 @@ export interface RawResponse {
   body: string;
 }
 
+/** 任务描述里 /api/attachments/... 图片的处理方式。 */
+export type ImageMode = "keep" | "link" | "download";
+
 export interface ChallengeResult {
   name: string | null;
   dir: string;
   files: string[];
+  /** images: "download" 时保存到 images/ 的资源。 */
+  images: string[];
 }
 
 export interface ChallengeEntry {

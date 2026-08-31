@@ -7,10 +7,30 @@ import { Download, Folder, FolderOpen, X } from "lucide-react";
 
 import * as api from "../api";
 import { useApp } from "../context";
-import type { ExportResult } from "../types";
+import type { ExportResult, ImageMode } from "../types";
 import { Badge, ErrorBox, Field, Spinner } from "../ui";
 
 type Level = "challenge" | "shixun" | "course";
+
+// 任务描述里的图片是站内相对路径（/api/attachments/…），本地打开必然裂图。
+// 这些图片无需登录即可访问，所以「改写链接」和「下载到本地」都成立。
+const IMAGE_MODES: { value: ImageMode; label: string; blurb: string }[] = [
+  {
+    value: "link",
+    label: "改写链接",
+    blurb: "把图片地址改成 educoder.net 的完整链接。文件小，联网时才能看到图。",
+  },
+  {
+    value: "download",
+    label: "保存图片",
+    blurb: "把图片下载到每关的 images/ 子目录并改为相对路径。完全离线可读，导出更慢。",
+  },
+  {
+    value: "keep",
+    label: "保持原样",
+    blurb: "不改动任务描述。图片在本地打不开，适合只想要原始文本的场景。",
+  },
+];
 
 const LEVELS: { value: Level; label: string; idLabel: string; blurb: string }[] = [
   {
@@ -40,6 +60,7 @@ export default function Export() {
   const [dest, setDest] = useState("");
   const [name, setName] = useState("");
   const [enterIfNeeded, setEnterIfNeeded] = useState(true);
+  const [images, setImages] = useState<ImageMode>("link");
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [result, setResult] = useState<ExportResult | null>(null);
@@ -87,10 +108,10 @@ export default function Export() {
       const folder = name.trim() || undefined;
       const r =
         level === "challenge"
-          ? await api.exportChallenge(id.trim(), dest, folder)
+          ? await api.exportChallenge(id.trim(), dest, folder, images)
           : level === "shixun"
-            ? await api.exportShixun(id.trim(), dest, folder)
-            : await api.exportCourse(id.trim(), dest, folder, enterIfNeeded);
+            ? await api.exportShixun(id.trim(), dest, folder, images)
+            : await api.exportCourse(id.trim(), dest, folder, enterIfNeeded, images);
       setResult(r);
     } catch (e) {
       setError(api.toApiError(e));
@@ -164,6 +185,28 @@ export default function Export() {
             />
           </Field>
 
+          <Field
+            label="任务描述里的图片"
+            hint="任务描述用的是站内相对路径，不处理的话本地打开是裂图。"
+          >
+            <div className="segmented">
+              {IMAGE_MODES.map((m) => (
+                <button
+                  key={m.value}
+                  className={`segment${images === m.value ? " is-active" : ""}`}
+                  onClick={() => setImages(m.value)}
+                  disabled={running}
+                  type="button"
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <p className="muted small">
+              {IMAGE_MODES.find((m) => m.value === images)!.blurb}
+            </p>
+          </Field>
+
           {level === "course" ? (
             <label className="check">
               <input
@@ -216,6 +259,7 @@ function ResultCard({ result }: { result: ExportResult }) {
   const challenges = "challenges" in result ? result.challenges : null;
   const summary = "summary" in result ? result.summary : null;
   const files = "files" in result ? result.files : null;
+  const imageCount = "images" in result ? result.images.length : 0;
 
   return (
     <section className="card">
@@ -232,6 +276,7 @@ function ResultCard({ result }: { result: ExportResult }) {
           {files.map((f) => (
             <li key={f}>✓ {f}</li>
           ))}
+          {imageCount > 0 ? <li>✓ images/（{imageCount} 张图片）</li> : null}
         </ul>
       ) : null}
 

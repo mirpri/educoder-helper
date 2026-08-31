@@ -146,9 +146,11 @@ export function enter(d) {
 export function exportChallenge(r) {
   if (!r || typeof r !== 'object') return J(r);
   const files = Array.isArray(r.files) ? r.files : [];
+  const images = Array.isArray(r.images) ? r.images : [];
   return lines(
     `已导出到 ${r.dir}，文件 ${files.length} 个：`,
     ...files.map((f) => '  ' + f),
+    ...(images.length ? [`  images/（${images.length} 张图片）`] : []),
   );
 }
 

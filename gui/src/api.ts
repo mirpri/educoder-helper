@@ -9,6 +9,7 @@ import type {
   CourseResult,
   CoursesResponse,
   HomeworksResponse,
+  ImageMode,
   RawResponse,
   ReportResponse,
   ShixunResult,
@@ -114,21 +115,37 @@ export const rawRequest = (method: string, path: string, body?: string) =>
 
 // ---- Export ----
 
-/** `edu export challenge <gameId> [dir]` */
-export const exportChallenge = (gameId: string, dest: string, name?: string) =>
-  call<ChallengeResult>("export_challenge", { gameId, dest, name: name || null });
+/** `edu export challenge <gameId> [dir] --images <mode>` */
+export const exportChallenge = (
+  gameId: string,
+  dest: string,
+  name?: string,
+  images: ImageMode = "link",
+) => call<ChallengeResult>("export_challenge", { gameId, dest, name: name || null, images });
 
-/** `edu export shixun <myshixunId> [dir]` */
-export const exportShixun = (myshixunId: string, dest: string, name?: string) =>
-  call<ShixunResult>("export_shixun", { myshixunId, dest, name: name || null });
+/** `edu export shixun <myshixunId> [dir] --images <mode>` */
+export const exportShixun = (
+  myshixunId: string,
+  dest: string,
+  name?: string,
+  images: ImageMode = "link",
+) => call<ShixunResult>("export_shixun", { myshixunId, dest, name: name || null, images });
 
-/** `edu export course <courseId> [dir]` */
+/** `edu export course <courseId> [dir] --images <mode>` */
 export const exportCourse = (
   courseId: string,
   dest: string,
   name?: string,
   enterIfNeeded = true,
-) => call<CourseResult>("export_course", { courseId, dest, name: name || null, enterIfNeeded });
+  images: ImageMode = "link",
+) =>
+  call<CourseResult>("export_course", {
+    courseId,
+    dest,
+    name: name || null,
+    enterIfNeeded,
+    images,
+  });
 
 export const cancelExport = () => call<void>("cancel_export");
 export const isExporting = () => call<boolean>("is_exporting");

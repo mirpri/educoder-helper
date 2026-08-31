@@ -5,7 +5,7 @@
   "identifier": "net.educoder.helper.gui",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -22,7 +22,7 @@
     ],
     "security": {
       "csp": "default-src 'self' ipc: http://ipc.localhost; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost",
-      "devCsp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost ws://localhost:1420 ws://localhost:1421"
+      "devCsp": "default-src 'self' ipc: http://ipc.localhost; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost ws://localhost:5173 ws://localhost:5174"
     }
   },
   "bundle": {
