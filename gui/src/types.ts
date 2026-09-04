@@ -144,3 +144,86 @@ export interface CourseResult {
 }
 
 export type ExportResult = ChallengeResult | ShixunResult | CourseResult;
+
+// ---- AI 实验报告 ----
+
+export interface TreeChallenge {
+  position: number | null;
+  name: string;
+  gameId: string;
+}
+
+export interface TreeHomework {
+  name: string;
+  shixunId: string | null;
+  myshixunId: string | null;
+  challenges: TreeChallenge[];
+  /** 为什么这个实训没有可选的关卡（未进入 / 读取失败）。 */
+  skipped: string | null;
+}
+
+export interface ReportTree {
+  courseName: string;
+  homeworks: TreeHomework[];
+}
+
+export interface AiConfig {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+}
+
+/** 由谁来写报告。 */
+export type BackendKind = "api" | "claudeCode" | "codex";
+
+export interface CliConfig {
+  /** 可执行文件的完整路径；留空表示在 PATH 上找。 */
+  path: string;
+  /** 传给 CLI 的 --model；留空用它自己的默认模型。 */
+  model: string;
+}
+
+export interface BackendConfig {
+  kind: BackendKind;
+  api: AiConfig;
+  cli: CliConfig;
+}
+
+export interface AiSettings {
+  config: BackendConfig;
+  rememberApiKey: boolean;
+}
+
+/** 本机上探测到的两个 agent CLI。 */
+export interface DetectedClis {
+  claudeCode: string | null;
+  codex: string | null;
+}
+
+export interface SelectedHomework {
+  name: string;
+  /** 该实训的关卡总数，供报告如实写"选取其中 N 个"。 */
+  total: number;
+  challenges: TreeChallenge[];
+}
+
+export interface ReportRequest {
+  courseName: string;
+  dest: string;
+  folder?: string | null;
+  homeworks: SelectedHomework[];
+  taskBook: string;
+  requirements: string;
+  template: string;
+}
+
+export interface ReportResult {
+  dir: string;
+  file: string;
+  sections: number;
+  /** 生成失败、正文里留了提示的小节。 */
+  failed: string[];
+  /** 还需要人工补充截图 / 运行结果的处数。 */
+  placeholders: number;
+  materials: number;
+}

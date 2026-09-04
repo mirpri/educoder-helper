@@ -37,10 +37,10 @@ export default function Report() {
   return (
     <div className="page">
       <header className="page-head">
-        <h1>作业报告</h1>
+        <h1>作业分数</h1>
         <p className="muted">
           reportId 就是作业列表里的 <span className="mono">student_work_id</span>，在「浏览 → 作业」
-          里点「报告」会自动带过来。
+          里点「分数」会自动带过来。
         </p>
         <div className="input-row input-row-wide">
           <input

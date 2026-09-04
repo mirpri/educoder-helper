@@ -33,6 +33,12 @@ impl CookieStatus {
 #[serde(rename_all = "camelCase")]
 pub struct Config {
     pub cookies_path: Option<String>,
+    /// Remembered report-backend settings. The API key is stored only when
+    /// the user asks for it — `remember_api_key` says whether they did.
+    #[serde(default)]
+    pub ai: Option<crate::backend::BackendConfig>,
+    #[serde(default)]
+    pub remember_api_key: bool,
 }
 
 pub struct AppState {
@@ -41,6 +47,12 @@ pub struct AppState {
     /// Set while an export is running so the UI can request a stop.
     pub cancel: Arc<AtomicBool>,
     pub exporting: Arc<AtomicBool>,
+    /// The report run has its own pair: it is much slower than an export, and
+    /// cancelling one must not stop the other.
+    pub report_cancel: Arc<AtomicBool>,
+    pub generating: Arc<AtomicBool>,
+    /// The API key for this session when the user chose not to persist it.
+    session_api_key: Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -50,7 +62,18 @@ impl AppState {
             status: Mutex::new(CookieStatus::empty()),
             cancel: Arc::new(AtomicBool::new(false)),
             exporting: Arc::new(AtomicBool::new(false)),
+            report_cancel: Arc::new(AtomicBool::new(false)),
+            generating: Arc::new(AtomicBool::new(false)),
+            session_api_key: Mutex::new(None),
         }
+    }
+
+    pub fn set_session_api_key(&self, key: Option<String>) {
+        *self.session_api_key.lock().expect("state poisoned") = key;
+    }
+
+    pub fn session_api_key(&self) -> Option<String> {
+        self.session_api_key.lock().expect("state poisoned").clone()
     }
 
     /// A clone of the live client, or a "needs cookies" error the UI knows to
@@ -116,6 +139,14 @@ pub fn save_config(app: &AppHandle, config: &Config) -> Result<()> {
     }
     std::fs::write(&file, serde_json::to_string_pretty(config).unwrap_or_default())?;
     Ok(())
+}
+
+/// Updates only the remembered cookies path. Callers used to build a whole
+/// `Config` for this, which silently dropped every other setting.
+pub fn save_cookies_path(app: &AppHandle, path: Option<String>) -> Result<()> {
+    let mut config = load_config(app);
+    config.cookies_path = path;
+    save_config(app, &config)
 }
 
 /// Startup path: remembered file > `$EDUCODER_COOKIES` > `./cookies.txt` >

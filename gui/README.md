@@ -35,7 +35,7 @@ src/                       前端（React 19 + TS，无 UI 框架，手写 CSS�
   context.tsx              全局状态：登录态、当前页、页面间传递的标识符
   hooks.ts                 useAsync：加载/错误/竞态处理
   ui.tsx                   通用小组件（Badge、IdChip、ErrorBox…）
-  pages/                   账号 / 浏览 / 导出 / 报告 / API 五个页面
+  pages/                   账号 / 浏览 / 导出 / 分数 / 实验报告 / API 六个页面
   styles.css               全部样式，亮暗主题跟随系统
 
 src-tauri/src/             后端（Rust）
@@ -44,6 +44,11 @@ src-tauri/src/             后端（Rust）
   client.rs                EduClient：签名请求、服务器时钟对齐、各接口封装
   exporter.rs              challenge / shixun / course 三级导出
   state.rs                 Cookie 状态、客户端实例、配置文件读写
+  ai.rs                    OpenAI 兼容的 chat 客户端（base URL 由用户填）
+  cli.rs                   本地 agent CLI 后端（claude / codex），子进程 + stdin
+  backend.rs               后端分发：API / Claude Code / Codex
+  prompts.rs               实验报告的提示词：章节 / 引言 / 总结 / 绪言
+  report.rs                报告编排：课程树、取材落盘、逐节生成、拼装
   commands.rs              #[tauri::command]，前端可调用的全部命令
   error.rs                 统一错误类型，序列化后直接给前端
 ```
@@ -77,6 +82,20 @@ src-tauri/src/             后端（Rust）
   逐个 `replace` 会让短 id 命中长 id 替换结果的内部。
 - 导出写文件时拒绝越界路径（`safe_join`），避免接口返回的路径写到目标目录之外。
 - 返回 HTML 而非 JSON 时识别为登录态过期，提示重新导入 Cookie，而不是把 HTML 当数据展示。
+- AI 实验报告（`report.rs` + `prompts.rs`）：**每个实训一次 AI 调用**，而不是一次性把整门课程
+  塞进一个请求——这样每次请求都能待在小模型的上下文里，日志能显示真实进度，某一节失败也不会
+  拖垮整轮。首节就失败会直接中止（多半是 key / 地址 / 模型填错了），之后的失败只在正文里留提示
+  并继续。模型偶尔无视"不要用 ```markdown 包住整个回答"，`unfence` 负责剥掉外层围栏而不动内层
+  代码块。需要人工补充的位置由提示词约定的 `待插入截图` / `待补充运行结果` 标记，
+  `count_placeholders` 据此统计给用户看。
+- 本地 CLI 后端（`cli.rs`）：`report.rs` 只依赖 `ChatBackend::chat`，所以加后端是加一个枚举分支，
+  编排代码不用动。三处需要小心的地方——**提示词走 stdin**（一节的提示词超过 30 KB，远超 Windows
+  命令行上限）；**工具全部禁用**（`--disallowed-tools` / codex 的 `-s read-only`），我们要的是散文
+  不是一个会自己去改文件的进程；**取消要杀子进程**（导出那套协作式检查点管不到阻塞在外部进程上的
+  调用）。`--disallowed-tools` 是变长参数，必须放在参数表最后，否则会吞掉后面的值。Windows 上
+  `codex` 是 `.cmd` shim 而非可执行文件，只能经 `cmd /C` 调起；`claude` 是原生 exe 可直接 spawn。
+  GUI 从文件管理器启动时 PATH 可能不全，所以 `find_program` 除了 PATH 还会翻几个常见安装位置，
+  并允许用户手填绝对路径。
 
 ## 前后端约定
 

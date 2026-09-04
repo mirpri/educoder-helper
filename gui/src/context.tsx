@@ -5,7 +5,7 @@ import { createContext, useContext } from "react";
 
 import type { CookieStatus, UserInfo } from "./types";
 
-export type Page = "account" | "browse" | "export" | "report" | "api";
+export type Page = "account" | "browse" | "export" | "report" | "aireport" | "tasks" | "api";
 
 export interface Selection {
   courseId?: string;
@@ -16,7 +16,7 @@ export interface Selection {
   gameId?: string;
   reportId?: string;
   /** Which export level the 导出 page should preselect. */
-  exportLevel?: "challenge" | "shixun" | "course";
+  exportLevel?: "challenge" | "shixun" | "course" | "selection";
 }
 
 export interface AppContextValue {

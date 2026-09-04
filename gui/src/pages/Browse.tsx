@@ -10,6 +10,7 @@ import {
   PlayCircle,
   RefreshCw,
   ScrollText,
+  Sparkles,
 } from "lucide-react";
 
 import * as api from "../api";
@@ -62,6 +63,7 @@ export default function Browse() {
             push({ kind: "homeworks", courseId: String(c.id), courseName: c.name ?? `课程 ${c.id}` });
           }}
           onExport={(c) => goto("export", { exportLevel: "course", courseId: String(c.id), courseName: c.name })}
+          onReport={(c) => goto("aireport", { courseId: String(c.id), courseName: c.name })}
         />
       ) : null}
 
@@ -162,7 +164,15 @@ function Guard({
 
 // ---- 课程 ----
 
-function Courses({ onOpen, onExport }: { onOpen: (c: Course) => void; onExport: (c: Course) => void }) {
+function Courses({
+  onOpen,
+  onExport,
+  onReport,
+}: {
+  onOpen: (c: Course) => void;
+  onExport: (c: Course) => void;
+  onReport: (c: Course) => void;
+}) {
   const state = useAsync(() => api.courses(), []);
   const list = state.data?.courses ?? [];
 
@@ -200,6 +210,15 @@ function Courses({ onOpen, onExport }: { onOpen: (c: Course) => void; onExport: 
                   }}
                 >
                   <Download size={13} /> 导出全部实训
+                </button>
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onReport(c);
+                  }}
+                >
+                  <Sparkles size={13} /> 生成报告
                 </button>
               </div>
             </li>
@@ -279,7 +298,7 @@ function Homeworks({
                     ) : null}
                     {h.student_work_id ? (
                       <button className="btn btn-sm" onClick={() => onReport(h)}>
-                        <ScrollText size={13} /> 报告
+                        <ScrollText size={13} /> 分数
                       </button>
                     ) : null}
                     {h.myshixun_identifier ? (

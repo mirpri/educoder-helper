@@ -2,11 +2,16 @@
 //!
 //! A Rust port of the Node core (`src/*.js`) exposed to the webview as Tauri
 //! commands, so the desktop app ships as a single binary with no Node runtime.
+mod ai;
+mod backend;
+mod cli;
 mod client;
 mod commands;
 mod cookies;
 mod error;
 mod exporter;
+mod prompts;
+mod report;
 mod sign;
 mod state;
 
@@ -47,8 +52,16 @@ pub fn run() {
             commands::export_challenge,
             commands::export_shixun,
             commands::export_course,
+            commands::export_selection,
             commands::cancel_export,
             commands::is_exporting,
+            commands::ai_settings,
+            commands::detect_cli_backends,
+            commands::save_ai_settings,
+            commands::report_tree,
+            commands::generate_report,
+            commands::cancel_report,
+            commands::is_generating,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

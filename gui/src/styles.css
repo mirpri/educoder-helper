@@ -932,3 +932,158 @@ svg.lucide {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ---- 实验报告页的关卡勾选树 ---------------------------------------- */
+
+.tree {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.tree-node + .tree-node {
+  border-top: 1px solid var(--border);
+}
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.tree-row:hover {
+  background: var(--surface-2);
+}
+
+.tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+}
+
+.tree-toggle:hover:not(:disabled) {
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.tree-toggle:disabled {
+  cursor: default;
+}
+
+.tree-label {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.tree-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-children {
+  margin: 0;
+  padding: 2px 0 6px 40px;
+  list-style: none;
+  background: var(--surface-2);
+}
+
+.tree-children li {
+  padding: 4px 12px;
+}
+
+.tree-children .pos {
+  flex: none;
+}
+
+.tree-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.tree-toolbar .tree-count {
+  margin-left: auto;
+}
+
+/* 选了东西的实训用强调色标出来，一眼扫得到 */
+.tree-count.is-on {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 一门课可能有十几个实训，别让卡片撑得太长 */
+.tree {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+/* ---- 任务页 --------------------------------------------------------- */
+
+/* 侧栏「任务」上的进行中角标 */
+.nav-count {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+}
+
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.task-card {
+  padding: 14px 16px;
+}
+
+.task-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.task-title {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.task-name {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.task-card .log {
+  margin-top: 12px;
+  max-height: 320px;
+}

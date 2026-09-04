@@ -32,11 +32,11 @@ impl Progress {
         Self { log, cancel }
     }
 
-    fn say(&self, msg: impl AsRef<str>) {
+    pub(crate) fn say(&self, msg: impl AsRef<str>) {
         (self.log)(msg.as_ref());
     }
 
-    fn check(&self) -> Result<()> {
+    pub(crate) fn check(&self) -> Result<()> {
         if self.cancel.load(Ordering::Relaxed) {
             return Err(Error::msg("已取消"));
         }
@@ -82,6 +82,27 @@ pub struct HomeworkEntry {
     pub skipped: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+/// One 关卡 the user ticked in the selection tree. Shared by the 导出 page and
+/// the 实验报告 page — both let you pick across a whole course.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectedChallenge {
+    pub position: Option<i64>,
+    pub name: String,
+    pub game_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelectedHomework {
+    pub name: String,
+    /// How many challenges the 实训 has in total, so a report section can say
+    /// "选取其中 N 个" honestly when only some were picked.
+    #[serde(default)]
+    pub total: usize,
+    pub challenges: Vec<SelectedChallenge>,
 }
 
 #[derive(Debug, Serialize)]
@@ -291,7 +312,7 @@ async fn rewrite_attachments(
 
 /// Mirrors the JS `sanitize`: strip characters that are illegal in a filename
 /// (plus space and `-`), collapse whitespace runs, and never return "".
-fn sanitize(name: &str) -> String {
+pub(crate) fn sanitize(name: &str) -> String {
     let replaced: String = name
         .chars()
         .map(|c| match c {
@@ -324,7 +345,7 @@ fn sanitize(name: &str) -> String {
 
 /// `challenge.path` holds the editable file(s), separated by `;` or `；`,
 /// sometimes with a trailing separator.
-fn split_paths(p: &str) -> Vec<String> {
+pub(crate) fn split_paths(p: &str) -> Vec<String> {
     p.split([';', '；'])
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -496,6 +517,58 @@ pub async fn export_shixun(
     }
 
     Ok(ShixunResult { dir: dir.display().to_string(), challenges })
+}
+
+/// Export exactly the 关卡 the user ticked, laid out like a course export:
+/// `base/<name>/<实训>/<NN_关卡>/…`. Unlike [`export_course`] this never enters
+/// a shixun or touches anything the user did not pick.
+pub async fn export_selection(
+    client: &EduClient,
+    homeworks: &[SelectedHomework],
+    base: &Path,
+    name: Option<&str>,
+    images: ImageMode,
+    p: &Progress,
+) -> Result<CourseResult> {
+    p.check()?;
+    if homeworks.is_empty() {
+        return Err(Error::msg("没有选择任何关卡。"));
+    }
+    let dir = base.join(sanitize(name.unwrap_or("自选导出")));
+    std::fs::create_dir_all(&dir)?;
+
+    let mut summary = Vec::new();
+    for hw in homeworks {
+        p.check()?;
+        p.say(format!("# {} （{} 关）", hw.name, hw.challenges.len()));
+        let hw_dir = dir.join(sanitize(&hw.name));
+        std::fs::create_dir_all(&hw_dir)?;
+
+        let mut done = 0usize;
+        let mut last_error = None;
+        for (i, c) in hw.challenges.iter().enumerate() {
+            p.check()?;
+            let pos = c.position.unwrap_or((i + 1) as i64);
+            let label = format!("{pos:02}_{}", c.name);
+            p.say(format!("  {pos:02} {}", c.name));
+            match export_challenge(client, &c.game_id, &hw_dir, Some(&label), images, p).await {
+                Ok(_) => done += 1,
+                Err(e) if e.message == "已取消" => return Err(e),
+                Err(e) => {
+                    p.say(format!("    ! 导出失败: {e}"));
+                    last_error = Some(e.message);
+                }
+            }
+        }
+        summary.push(HomeworkEntry {
+            name: hw.name.clone(),
+            challenges: Some(done),
+            skipped: None,
+            error: last_error,
+        });
+    }
+
+    Ok(CourseResult { dir: dir.display().to_string(), summary })
 }
 
 /// Export every 实训作业 (shixun homework) of a course into `base/<name>`, one

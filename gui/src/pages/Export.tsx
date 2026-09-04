@@ -3,14 +3,16 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Download, Folder, FolderOpen, X } from "lucide-react";
+import { Download, Folder, FolderOpen, ListTree, X } from "lucide-react";
 
 import * as api from "../api";
+import { ChallengeTree, allGameIds, countPicked, selectedHomeworks } from "../ChallengeTree";
 import { useApp } from "../context";
-import type { ExportResult, ImageMode } from "../types";
+import { useTasks } from "../tasks";
+import type { ExportResult, ImageMode, ReportTree } from "../types";
 import { Badge, ErrorBox, Field, Spinner } from "../ui";
 
-type Level = "challenge" | "shixun" | "course";
+type Level = "challenge" | "shixun" | "course" | "selection";
 
 // 任务描述里的图片是站内相对路径（/api/attachments/…），本地打开必然裂图。
 // 这些图片无需登录即可访问，所以「改写链接」和「下载到本地」都成立。
@@ -51,6 +53,12 @@ const LEVELS: { value: Level; label: string; idLabel: string; blurb: string }[] 
     idLabel: "courseId",
     blurb: "导出课程下所有实训作业，每个作业一个子目录。没有实例的实训可先自动进入。",
   },
+  {
+    value: "selection",
+    label: "自选关卡",
+    idLabel: "courseId",
+    blurb: "读出整门课程的结构，勾选要导出的实训和关卡。只动你勾选的，不会进入未开始的实训。",
+  },
 ];
 
 export default function Export() {
@@ -60,12 +68,19 @@ export default function Export() {
   const [dest, setDest] = useState("");
   const [name, setName] = useState("");
   const [enterIfNeeded, setEnterIfNeeded] = useState(true);
+  const [tree, setTree] = useState<ReportTree | null>(null);
+  const [loadingTree, setLoadingTree] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [images, setImages] = useState<ImageMode>("link");
-  const [running, setRunning] = useState(false);
-  const [log, setLog] = useState<string[]>([]);
   const [result, setResult] = useState<ExportResult | null>(null);
   const [error, setError] = useState<api.ApiError | null>(null);
   const logRef = useRef<HTMLPreElement>(null);
+
+  // 进度来自全局任务，页面只是它的一个视图。
+  const tasks = useTasks();
+  const task = tasks.running("export");
+  const running = task !== undefined;
+  const log = task?.log ?? [];
 
   const meta = LEVELS.find((l) => l.value === level)!;
 
@@ -76,23 +91,34 @@ export default function Export() {
       challenge: [selection.gameId, undefined],
       shixun: [selection.myshixunId, selection.homeworkName],
       course: [selection.courseId, selection.courseName],
+      selection: [selection.courseId, selection.courseName],
     };
     const [nextId, nextName] = defaults[level];
     setId(nextId ?? "");
     setName(nextName ?? "");
   }, [level, selection]);
 
-  // Stream the backend's progress lines into the log pane.
-  useEffect(() => {
-    const unlisten = api.onExportLog((line) => setLog((prev) => [...prev, line]));
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
-  }, []);
-
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [log]);
+
+  async function loadTree() {
+    setLoadingTree(true);
+    setError(null);
+    setTree(null);
+    try {
+      const t = await tasks.run("tree", `读取课程结构 ${id.trim()}`, () =>
+        api.reportTree(id.trim()),
+      );
+      setTree(t);
+      setPicked(allGameIds(t));
+      if (!name.trim()) setName(t.courseName);
+    } catch (e) {
+      setError(api.toApiError(e));
+    } finally {
+      setLoadingTree(false);
+    }
+  }
 
   async function pickDest() {
     const picked = await open({ directory: true, multiple: false, title: "选择导出目录" });
@@ -100,27 +126,43 @@ export default function Export() {
   }
 
   async function start() {
-    setRunning(true);
-    setLog([]);
     setResult(null);
     setError(null);
     try {
       const folder = name.trim() || undefined;
-      const r =
+      const r = await tasks.run("export", taskTitle(), async () =>
         level === "challenge"
           ? await api.exportChallenge(id.trim(), dest, folder, images)
           : level === "shixun"
             ? await api.exportShixun(id.trim(), dest, folder, images)
-            : await api.exportCourse(id.trim(), dest, folder, enterIfNeeded, images);
+            : level === "course"
+              ? await api.exportCourse(id.trim(), dest, folder, enterIfNeeded, images)
+              : await api.exportSelection(
+                  selectedHomeworks(tree!, picked),
+                  dest,
+                  folder,
+                  images,
+                ),
+        (r) => r.dir,
+      );
       setResult(r);
     } catch (e) {
       setError(api.toApiError(e));
-    } finally {
-      setRunning(false);
     }
   }
 
-  const canStart = !running && id.trim() !== "" && dest !== "";
+  function taskTitle() {
+    const what = LEVELS.find((l) => l.value === level)!.label;
+    if (level === "selection") {
+      return `导出自选关卡（${countPicked(tree!, picked)} 关）`;
+    }
+    return `导出${what} ${id.trim()}`;
+  }
+
+  const canStart =
+    !running &&
+    dest !== "" &&
+    (level === "selection" ? tree !== null && countPicked(tree, picked) > 0 : id.trim() !== "");
 
   return (
     <div className="page">
@@ -149,15 +191,39 @@ export default function Export() {
 
         <div className="form-grid">
           <Field label={meta.idLabel} hint="可在「浏览」页点击 id 徽章复制，或直接从这里输入。">
-            <input
-              className="input mono"
-              value={id}
-              onChange={(e) => setId(e.target.value)}
-              placeholder={meta.idLabel}
-              disabled={running}
-              spellCheck={false}
-            />
+            {level === "selection" ? (
+              <div className="input-row">
+                <input
+                  className="input mono"
+                  value={id}
+                  onChange={(e) => setId(e.target.value)}
+                  placeholder={meta.idLabel}
+                  disabled={running || loadingTree}
+                  spellCheck={false}
+                />
+                <button
+                  className="btn"
+                  onClick={() => void loadTree()}
+                  disabled={running || loadingTree || id.trim() === ""}
+                >
+                  {loadingTree ? <Spinner /> : <ListTree size={14} />} 读取课程结构
+                </button>
+              </div>
+            ) : (
+              <input
+                className="input mono"
+                value={id}
+                onChange={(e) => setId(e.target.value)}
+                placeholder={meta.idLabel}
+                disabled={running}
+                spellCheck={false}
+              />
+            )}
           </Field>
+
+          {level === "selection" && tree ? (
+            <ChallengeTree tree={tree} picked={picked} onChange={setPicked} disabled={running} />
+          ) : null}
 
           <Field label="导出到" hint="导出内容会放进这个目录下的一个子文件夹。">
             <div className="input-row">

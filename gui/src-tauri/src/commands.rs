@@ -7,13 +7,16 @@ use std::time::{Duration, Instant};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 
+use crate::backend::{BackendConfig, ChatBackend};
+use crate::cli::{self, DetectedClis};
 use crate::client::RawResponse;
 use crate::cookies::{self, Jar};
 use crate::error::{Error, Result};
 use crate::exporter::{
-    self, ChallengeResult, CourseResult, ImageMode, Progress, ShixunResult,
+    self, ChallengeResult, CourseResult, ImageMode, Progress, SelectedHomework, ShixunResult,
 };
-use crate::state::{self, AppState, Config, CookieStatus};
+use crate::report::{self, ReportRequest, ReportResult, ReportTree};
+use crate::state::{self, AppState, CookieStatus};
 
 // ---- Account / cookies ----
 
@@ -32,7 +35,7 @@ pub fn load_cookies_file(
     let path = PathBuf::from(path);
     let jar = cookies::load_file(&path)?;
     let status = state.set(&jar, Some(path.display().to_string()))?;
-    state::save_config(&app, &Config { cookies_path: Some(path.display().to_string()) })?;
+    state::save_cookies_path(&app, Some(path.display().to_string()))?;
     Ok(status)
 }
 
@@ -53,7 +56,7 @@ pub fn load_cookies_text(
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, cookies::to_netscape(&jar))?;
-        state::save_config(&app, &Config { cookies_path: Some(path.display().to_string()) })?;
+        state::save_cookies_path(&app, Some(path.display().to_string()))?;
     }
     state.set(&jar, saved.map(|p| p.display().to_string()))
 }
@@ -78,7 +81,7 @@ pub fn export_cookies_file(state: State<'_, AppState>, path: String) -> Result<S
 #[tauri::command]
 pub fn clear_cookies(app: AppHandle, state: State<'_, AppState>) -> Result<CookieStatus> {
     state.clear();
-    state::save_config(&app, &Config { cookies_path: None })?;
+    state::save_cookies_path(&app, None)?;
     Ok(state.status())
 }
 
@@ -171,7 +174,7 @@ fn adopt_login(app: &AppHandle, jar: &Jar) -> Result<CookieStatus> {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, cookies::to_netscape(jar))?;
-        state::save_config(app, &Config { cookies_path: Some(path.display().to_string()) })?;
+        state::save_cookies_path(app, Some(path.display().to_string()))?;
     }
     app.state::<AppState>().set(jar, saved.map(|p| p.display().to_string()))
 }
@@ -357,6 +360,31 @@ pub async fn export_course(
     .await
 }
 
+/// Exports exactly the 关卡 ticked in the selection tree.
+#[tauri::command]
+pub async fn export_selection(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    homeworks: Vec<SelectedHomework>,
+    dest: String,
+    name: Option<String>,
+    images: Option<ImageMode>,
+) -> Result<CourseResult> {
+    let images = images.unwrap_or_default();
+    with_export(&app, &state, |client, p| async move {
+        exporter::export_selection(
+            &client,
+            &homeworks,
+            Path::new(&dest),
+            name.as_deref(),
+            images,
+            &p,
+        )
+        .await
+    })
+    .await
+}
+
 /// Asks the running export to stop at the next checkpoint.
 #[tauri::command]
 pub fn cancel_export(state: State<'_, AppState>) {
@@ -366,4 +394,129 @@ pub fn cancel_export(state: State<'_, AppState>) {
 #[tauri::command]
 pub fn is_exporting(state: State<'_, AppState>) -> bool {
     state.exporting.load(Ordering::SeqCst)
+}
+
+// ---- AI report ----
+
+/// What the report page shows in its settings panel. The API key is returned
+/// only if the user asked us to remember it — otherwise the field comes back
+/// empty and they retype it (or it lives in memory for this session only).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiSettings {
+    pub config: BackendConfig,
+    pub remember_api_key: bool,
+}
+
+#[tauri::command]
+pub fn ai_settings(app: AppHandle, state: State<'_, AppState>) -> AiSettings {
+    let stored = state::load_config(&app);
+    let mut config = stored.ai.unwrap_or_default();
+    if config.api.api_key.is_empty() {
+        // Not persisted, but possibly typed earlier in this session.
+        config.api.api_key = state.session_api_key().unwrap_or_default();
+    }
+    AiSettings { config, remember_api_key: stored.remember_api_key }
+}
+
+#[tauri::command]
+pub fn save_ai_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    config: BackendConfig,
+    remember_api_key: bool,
+) -> Result<()> {
+    state.set_session_api_key(Some(config.api.api_key.clone()));
+    let mut stored = state::load_config(&app);
+    let mut to_save = config;
+    if !remember_api_key {
+        to_save.api.api_key = String::new();
+    }
+    stored.ai = Some(to_save);
+    stored.remember_api_key = remember_api_key;
+    state::save_config(&app, &stored)
+}
+
+/// Course → 实训 → 关卡, for the selection tree on the report page.
+#[tauri::command]
+pub async fn report_tree(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    course_id: String,
+) -> Result<ReportTree> {
+    let client = state.client()?;
+    let handle = app.clone();
+    let progress = Progress::new(
+        Box::new(move |m: &str| {
+            let _ = handle.emit("report:log", m.to_string());
+        }),
+        state.report_cancel.clone(),
+    );
+    state.report_cancel.store(false, Ordering::SeqCst);
+    report::build_tree(&client, &course_id, &progress).await
+}
+
+/// The long one: fetch every selected challenge, then drive the prompts.
+/// Progress is streamed as `report:log`; completion as `report:done`.
+#[tauri::command]
+pub async fn generate_report(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: ReportRequest,
+    ai: BackendConfig,
+) -> Result<ReportResult> {
+    if state.generating.swap(true, Ordering::SeqCst) {
+        return Err(Error::msg("已有报告生成任务在进行中"));
+    }
+    state.report_cancel.store(false, Ordering::SeqCst);
+    state.set_session_api_key(Some(ai.api.api_key.clone()));
+
+    let finish = |state: &State<'_, AppState>, app: &AppHandle, ok: bool| {
+        state.generating.store(false, Ordering::SeqCst);
+        let _ = app.emit("report:done", ok);
+    };
+
+    let client = match state.client() {
+        Ok(c) => c,
+        Err(e) => {
+            finish(&state, &app, false);
+            return Err(e);
+        }
+    };
+    let ai_client = match ChatBackend::new(ai, state.report_cancel.clone()) {
+        Ok(c) => c,
+        Err(e) => {
+            finish(&state, &app, false);
+            return Err(e);
+        }
+    };
+
+    let handle = app.clone();
+    let progress = Progress::new(
+        Box::new(move |m: &str| {
+            let _ = handle.emit("report:log", m.to_string());
+        }),
+        state.report_cancel.clone(),
+    );
+
+    let result = report::generate(&client, &ai_client, &request, &progress).await;
+    finish(&state, &app, result.is_ok());
+    result
+}
+
+#[tauri::command]
+pub fn cancel_report(state: State<'_, AppState>) {
+    state.report_cancel.store(true, Ordering::SeqCst);
+}
+
+#[tauri::command]
+pub fn is_generating(state: State<'_, AppState>) -> bool {
+    state.generating.load(Ordering::SeqCst)
+}
+
+/// Where the local agent CLIs are, if they are installed at all. Drives the
+/// "已检测到 / 未检测到" hints next to the backend picker.
+#[tauri::command]
+pub fn detect_cli_backends() -> DetectedClis {
+    cli::detect()
 }

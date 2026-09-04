@@ -5,7 +5,9 @@ import {
   Download,
   FolderTree,
   GraduationCap,
+  ListChecks,
   ScrollText,
+  Sparkles,
   TerminalSquare,
 } from "lucide-react";
 
@@ -14,23 +16,37 @@ import { AppContext, type Page, type Selection } from "./context";
 import Account from "./pages/Account";
 import ApiConsole from "./pages/ApiConsole";
 import Browse from "./pages/Browse";
+import { TasksProvider, useTasks } from "./tasks";
+import AiReport from "./pages/AiReport";
 import Export from "./pages/Export";
 import Report from "./pages/Report";
+import Tasks from "./pages/Tasks";
 import type { CookieStatus, UserInfo } from "./types";
 
 const NAV: { page: Page; label: string; Icon: LucideIcon; hint: string }[] = [
   { page: "browse", label: "浏览", Icon: FolderTree, hint: "课程 → 作业 → 关卡 → 任务与代码" },
   { page: "export", label: "导出", Icon: Download, hint: "把任务描述和代码存到本地" },
-  { page: "report", label: "报告", Icon: ScrollText, hint: "作业报告：每关分数与改动文件" },
+  { page: "report", label: "分数", Icon: ScrollText, hint: "作业报告：每关分数与改动文件" },
+  { page: "aireport", label: "实验报告", Icon: Sparkles, hint: "用 AI 起草整门课程的实践报告" },
+  { page: "tasks", label: "任务", Icon: ListChecks, hint: "进行中与已完成任务的进度和日志" },
   { page: "api", label: "API", Icon: TerminalSquare, hint: "对任意接口发起签名请求" },
   { page: "account", label: "账号", Icon: CircleUser, hint: "登录状态与 Cookie" },
 ];
 
 export default function App() {
+  return (
+    <TasksProvider>
+      <AppShell />
+    </TasksProvider>
+  );
+}
+
+function AppShell() {
   const [status, setStatus] = useState<CookieStatus | null>(null);
   const [user, setUser] = useState<UserInfo | null>(null);
   const [page, setPage] = useState<Page>("browse");
   const [selection, setSelection] = useState<Selection>({});
+  const { runningCount } = useTasks();
 
   const refreshSession = useCallback(async () => {
     const s = await api.cookieStatus().catch(() => null);
@@ -87,6 +103,9 @@ export default function App() {
               >
                 <item.Icon className="nav-icon" size={17} aria-hidden="true" />
                 <span className="nav-label">{item.label}</span>
+                {item.page === "tasks" && runningCount > 0 ? (
+                  <span className="nav-count">{runningCount}</span>
+                ) : null}
               </button>
             ))}
           </nav>
@@ -113,6 +132,8 @@ export default function App() {
           {page === "browse" ? <Browse /> : null}
           {page === "export" ? <Export /> : null}
           {page === "report" ? <Report /> : null}
+          {page === "aireport" ? <AiReport /> : null}
+          {page === "tasks" ? <Tasks /> : null}
           {page === "api" ? <ApiConsole /> : null}
           {page === "account" ? <Account /> : null}
         </main>

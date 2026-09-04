@@ -25,6 +25,9 @@ md-5 = "0.10"
 base64 = "0.22"
 httpdate = "1"
 uuid = { version = "1", features = ["v4"] }
+# Already in the tree via tauri; declared here for Command/timeouts so the
+# report backend can spawn a local agent CLI and kill it on cancel.
+tokio = { version = "1", features = ["process", "io-util", "time", "macros"] }
 
 [profile.release]
 codegen-units = 1

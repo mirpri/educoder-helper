@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 import type {
+  AiSettings,
+  BackendConfig,
   ChallengeResult,
   ChallengesResponse,
   CookieStatus,
@@ -10,8 +12,13 @@ import type {
   CoursesResponse,
   HomeworksResponse,
   ImageMode,
+  DetectedClis,
   RawResponse,
+  ReportRequest,
   ReportResponse,
+  ReportResult,
+  ReportTree,
+  SelectedHomework,
   ShixunResult,
   TaskResponse,
   UserInfo,
@@ -131,6 +138,14 @@ export const exportShixun = (
   images: ImageMode = "link",
 ) => call<ShixunResult>("export_shixun", { myshixunId, dest, name: name || null, images });
 
+/** 导出勾选树里选中的那些关卡。 */
+export const exportSelection = (
+  homeworks: SelectedHomework[],
+  dest: string,
+  name?: string,
+  images: ImageMode = "link",
+) => call<CourseResult>("export_selection", { homeworks, dest, name: name || null, images });
+
 /** `edu export course <courseId> [dir] --images <mode>` */
 export const exportCourse = (
   courseId: string,
@@ -153,3 +168,26 @@ export const isExporting = () => call<boolean>("is_exporting");
 /** Subscribes to the export progress log; returns an unlisten function. */
 export const onExportLog = (fn: (line: string) => void) =>
   listen<string>("export:log", (e) => fn(e.payload));
+
+// ---- AI 实验报告 ----
+
+export const aiSettings = () => call<AiSettings>("ai_settings");
+
+export const saveAiSettings = (config: BackendConfig, rememberApiKey: boolean) =>
+  call<void>("save_ai_settings", { config, rememberApiKey });
+
+/** 本机装没装 claude / codex，用来给后端选择器加提示。 */
+export const detectCliBackends = () => call<DetectedClis>("detect_cli_backends");
+
+/** 课程 → 实训 → 关卡，供报告页的勾选树使用。 */
+export const reportTree = (courseId: string) => call<ReportTree>("report_tree", { courseId });
+
+export const generateReport = (request: ReportRequest, ai: BackendConfig) =>
+  call<ReportResult>("generate_report", { request, ai });
+
+export const cancelReport = () => call<void>("cancel_report");
+export const isGenerating = () => call<boolean>("is_generating");
+
+/** 订阅报告生成的进度日志；返回取消订阅的函数。 */
+export const onReportLog = (fn: (line: string) => void) =>
+  listen<string>("report:log", (e) => fn(e.payload));
