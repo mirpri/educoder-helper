@@ -20,6 +20,8 @@ import type {
   ReportTree,
   SelectedHomework,
   ShixunResult,
+  SolveRequest,
+  SolveResult,
   TaskResponse,
   UserInfo,
 } from "./types";
@@ -191,3 +193,15 @@ export const isGenerating = () => call<boolean>("is_generating");
 /** 订阅报告生成的进度日志；返回取消订阅的函数。 */
 export const onReportLog = (fn: (line: string) => void) =>
   listen<string>("report:log", (e) => fn(e.payload));
+
+// ---- AI 做实验 ----
+
+export const solveSelection = (request: SolveRequest, ai: BackendConfig) =>
+  call<SolveResult>("solve_selection", { request, ai });
+
+export const cancelSolve = () => call<void>("cancel_solve");
+export const isSolving = () => call<boolean>("is_solving");
+
+/** 订阅「AI 做实验」的进度日志；返回取消订阅的函数。 */
+export const onSolveLog = (fn: (line: string) => void) =>
+  listen<string>("solve:log", (e) => fn(e.payload));

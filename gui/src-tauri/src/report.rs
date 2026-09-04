@@ -165,7 +165,7 @@ pub struct ReportResult {
 }
 
 /// Models sometimes wrap the whole answer in a fence despite being told not to.
-fn unfence(text: &str) -> String {
+pub(crate) fn unfence(text: &str) -> String {
     let t = text.trim();
     let Some(rest) = t.strip_prefix("```") else {
         return t.to_string();

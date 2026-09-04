@@ -231,6 +231,67 @@ pub fn chapter2_preamble(course_name: &str, homework_names: &[String]) -> String
     )
 }
 
+// ------------------------------------------------------- AI 做实验 (solve)
+
+/// Larger than the report caps: here the code itself is the deliverable, not
+/// a paraphrase of it, so truncating it would hand back broken submissions.
+const SOLVE_MAX_TASK_CHARS: usize = 8000;
+const SOLVE_MAX_CODE_CHARS: usize = 20000;
+
+/// The marker the model must wrap each file in — [`crate::solve::parse_files`]
+/// splits on it. Chosen to be unlikely to collide with anything a model would
+/// put inside real source (a raw `>>>>> FILE: ` / `<<<<< END` pair).
+pub const SOLVE_FILE_MARK: &str = ">>>>> FILE: ";
+pub const SOLVE_END_MARK: &str = "<<<<< END";
+
+/// System prompt for "AI 做实验": produce completed code ready to paste back
+/// into EduCoder and submit, rather than a report about the code.
+pub const SOLVE_SYSTEM: &str = r#"你是一名熟练的程序员，正在帮学生完成头歌（EduCoder）平台上的编程实训关卡。
+给定关卡的任务描述，以及仓库里已有的代码文件，你需要给出能够通过测评、可以直接复制粘贴提交的完整代码。
+
+输出格式要求（严格遵守，输出会被程序按这个格式解析，格式不对会导致学生拿不到任何代码）：
+1. 每一个要提交的文件用下面的结构包裹，独占一行，文件路径必须与下面给出的路径完全一致（大小写、目录都不能改）：
+>>>>> FILE: 给定的相对路径
+文件的完整内容，从第一行到最后一行都要写全，不要加代码围栏 ```，不要加行号，不要省略未修改的部分
+<<<<< END
+   有几个文件就重复几次这个结构，紧挨着写，不要输出标记之外的任何文字——不要解释、不要开场白、不要总结、不要用自然语言描述你做了什么。
+2. 只允许补全/修改任务描述要求实现的部分；已经写好的代码（import、类名、方法签名、测试脚手架等）除非任务明确要求，否则原样保留，不要因为"顺手"重构或改风格而破坏测评。
+3. 若代码里已有 TODO / 空函数体 / begin-end 之类的提示，把该处补全；其余保持不变。
+4. 不确定时选最贴合任务描述字面要求、最不容易导致测评失败的写法；不要为了偷懒而绕过任务本身（例如直接打印期望的固定答案而不写真正的逻辑）。
+5. 如果材料里没有任何代码文件，就依据任务描述自行判断需要创建的文件名（含合适的扩展名），仍然用上面的 FILE/END 格式输出。"#;
+
+/// One challenge's raw material, rendered for [`solve_challenge`].
+fn render_solve_files(files: &[(String, String)]) -> String {
+    if files.is_empty() {
+        return "（仓库里没有可编辑的代码文件，请依据任务描述自行判断需要的文件）\n".to_string();
+    }
+    let mut out = String::new();
+    for (path, code) in files {
+        out.push_str(&format!("\n【文件 · {path}】\n{}\n", clip(code, SOLVE_MAX_CODE_CHARS)));
+    }
+    out
+}
+
+/// One challenge → the prompt asking for its completed files.
+pub fn solve_challenge(name: &str, task: &str, files: &[(String, String)], requirements: &str) -> String {
+    let requirements_block = if requirements.trim().is_empty() {
+        String::new()
+    } else {
+        format!("=== 额外要求 ===\n{}\n\n", clip(requirements, 4000))
+    };
+    format!(
+        r#"关卡名称：{name}
+
+【关卡任务描述】
+{task}
+
+{requirements_block}=== 仓库中已有的代码 ===
+{body}"#,
+        task = clip(task, SOLVE_MAX_TASK_CHARS),
+        body = render_solve_files(files),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,5 +338,21 @@ mod tests {
             files: vec![],
         };
         assert!(c.render().contains("未取到代码文件"));
+    }
+
+    #[test]
+    fn solve_prompt_carries_path_and_content_for_each_file() {
+        let files = vec![("src/Main.java".to_string(), "class Main {}".to_string())];
+        let p = solve_challenge("第1关", "写一个类", &files, "");
+        assert!(p.contains("src/Main.java"));
+        assert!(p.contains("class Main {}"));
+        assert!(!p.contains("额外要求"));
+    }
+
+    #[test]
+    fn solve_prompt_notes_missing_files_and_carries_requirements() {
+        let p = solve_challenge("第1关", "写一个类", &[], "禁止使用第三方库");
+        assert!(p.contains("没有可编辑的代码文件"));
+        assert!(p.contains("禁止使用第三方库"));
     }
 }

@@ -8,11 +8,11 @@ import type { ReactNode } from "react";
 
 import * as api from "./api";
 
-export type TaskKind = "export" | "report" | "tree";
+export type TaskKind = "export" | "report" | "tree" | "solve";
 export type TaskStatus = "running" | "done" | "error" | "cancelled";
 
 /** 后端推进度用的事件通道。取消也按通道分派。 */
-export type TaskChannel = "export" | "report";
+export type TaskChannel = "export" | "report" | "solve";
 
 export interface Task {
   id: string;
@@ -32,12 +32,14 @@ const CHANNEL: Record<TaskKind, TaskChannel> = {
   export: "export",
   report: "report",
   tree: "report",
+  solve: "solve",
 };
 
 export const KIND_LABEL: Record<TaskKind, string> = {
   export: "导出",
   report: "生成报告",
   tree: "读取课程结构",
+  solve: "AI 做实验",
 };
 
 interface TasksValue {
@@ -76,7 +78,11 @@ export function TasksProvider({ children }: { children: ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   // 事件回调在订阅时就被捕获，拿不到最新的 tasks；用 ref 存"当前每个通道在跑
   // 的任务 id"，避免为了这个反复重订阅事件。
-  const activeRef = useRef<Record<TaskChannel, string | null>>({ export: null, report: null });
+  const activeRef = useRef<Record<TaskChannel, string | null>>({
+    export: null,
+    report: null,
+    solve: null,
+  });
 
   const append = useCallback((channel: TaskChannel, line: string) => {
     const id = activeRef.current[channel];
@@ -89,6 +95,7 @@ export function TasksProvider({ children }: { children: ReactNode }) {
     const un = [
       api.onExportLog((line) => append("export", line)),
       api.onReportLog((line) => append("report", line)),
+      api.onSolveLog((line) => append("solve", line)),
     ];
     return () => {
       for (const u of un) void u.then((fn) => fn());
@@ -133,7 +140,8 @@ export function TasksProvider({ children }: { children: ReactNode }) {
       const task = tasks.find((t) => t.id === id);
       if (!task || task.status !== "running") return;
       if (task.channel === "export") void api.cancelExport();
-      else void api.cancelReport();
+      else if (task.channel === "report") void api.cancelReport();
+      else void api.cancelSolve();
     },
     [tasks],
   );

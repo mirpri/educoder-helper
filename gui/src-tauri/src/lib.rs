@@ -13,6 +13,7 @@ mod exporter;
 mod prompts;
 mod report;
 mod sign;
+mod solve;
 mod state;
 
 use state::AppState;
@@ -62,6 +63,9 @@ pub fn run() {
             commands::generate_report,
             commands::cancel_report,
             commands::is_generating,
+            commands::solve_selection,
+            commands::cancel_solve,
+            commands::is_solving,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

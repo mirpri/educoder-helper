@@ -227,3 +227,29 @@ export interface ReportResult {
   placeholders: number;
   materials: number;
 }
+
+// ---- AI 做实验 ----
+
+export interface SolveRequest {
+  courseName: string;
+  dest: string;
+  folder?: string | null;
+  homeworks: SelectedHomework[];
+  requirements: string;
+}
+
+export interface SolvedChallenge {
+  name: string;
+  dir: string;
+  files: string[];
+  error: string | null;
+}
+
+export interface SolveResult {
+  dir: string;
+  challenges: SolvedChallenge[];
+  solved: number;
+  failed: number;
+  /** 汇总了所有关卡答案代码块的单个 md 文件，供直接复制。 */
+  summaryFile: string;
+}

@@ -9,6 +9,7 @@ import {
   ScrollText,
   Sparkles,
   TerminalSquare,
+  Wand2,
 } from "lucide-react";
 
 import * as api from "./api";
@@ -18,6 +19,7 @@ import ApiConsole from "./pages/ApiConsole";
 import Browse from "./pages/Browse";
 import { TasksProvider, useTasks } from "./tasks";
 import AiReport from "./pages/AiReport";
+import AiSolve from "./pages/AiSolve";
 import Export from "./pages/Export";
 import Report from "./pages/Report";
 import Tasks from "./pages/Tasks";
@@ -28,6 +30,7 @@ const NAV: { page: Page; label: string; Icon: LucideIcon; hint: string }[] = [
   { page: "export", label: "导出", Icon: Download, hint: "把任务描述和代码存到本地" },
   { page: "report", label: "分数", Icon: ScrollText, hint: "作业报告：每关分数与改动文件" },
   { page: "aireport", label: "实验报告", Icon: Sparkles, hint: "用 AI 起草整门课程的实践报告" },
+  { page: "aisolve", label: "AI 做实验", Icon: Wand2, hint: "用 AI 给出关卡的完整代码，供复制提交" },
   { page: "tasks", label: "任务", Icon: ListChecks, hint: "进行中与已完成任务的进度和日志" },
   { page: "api", label: "API", Icon: TerminalSquare, hint: "对任意接口发起签名请求" },
   { page: "account", label: "账号", Icon: CircleUser, hint: "登录状态与 Cookie" },
@@ -133,6 +136,7 @@ function AppShell() {
           {page === "export" ? <Export /> : null}
           {page === "report" ? <Report /> : null}
           {page === "aireport" ? <AiReport /> : null}
+          {page === "aisolve" ? <AiSolve /> : null}
           {page === "tasks" ? <Tasks /> : null}
           {page === "api" ? <ApiConsole /> : null}
           {page === "account" ? <Account /> : null}

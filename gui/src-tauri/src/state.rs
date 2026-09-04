@@ -51,6 +51,10 @@ pub struct AppState {
     /// cancelling one must not stop the other.
     pub report_cancel: Arc<AtomicBool>,
     pub generating: Arc<AtomicBool>,
+    /// "AI 做实验" has its own pair for the same reason: independent of, and
+    /// possibly concurrent with, a report generation run.
+    pub solve_cancel: Arc<AtomicBool>,
+    pub solving: Arc<AtomicBool>,
     /// The API key for this session when the user chose not to persist it.
     session_api_key: Mutex<Option<String>>,
 }
@@ -64,6 +68,8 @@ impl AppState {
             exporting: Arc::new(AtomicBool::new(false)),
             report_cancel: Arc::new(AtomicBool::new(false)),
             generating: Arc::new(AtomicBool::new(false)),
+            solve_cancel: Arc::new(AtomicBool::new(false)),
+            solving: Arc::new(AtomicBool::new(false)),
             session_api_key: Mutex::new(None),
         }
     }

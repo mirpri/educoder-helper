@@ -11,6 +11,7 @@ import {
   RefreshCw,
   ScrollText,
   Sparkles,
+  Wand2,
 } from "lucide-react";
 
 import * as api from "../api";
@@ -64,6 +65,7 @@ export default function Browse() {
           }}
           onExport={(c) => goto("export", { exportLevel: "course", courseId: String(c.id), courseName: c.name })}
           onReport={(c) => goto("aireport", { courseId: String(c.id), courseName: c.name })}
+          onSolve={(c) => goto("aisolve", { courseId: String(c.id), courseName: c.name })}
         />
       ) : null}
 
@@ -168,10 +170,12 @@ function Courses({
   onOpen,
   onExport,
   onReport,
+  onSolve,
 }: {
   onOpen: (c: Course) => void;
   onExport: (c: Course) => void;
   onReport: (c: Course) => void;
+  onSolve: (c: Course) => void;
 }) {
   const state = useAsync(() => api.courses(), []);
   const list = state.data?.courses ?? [];
@@ -210,6 +214,15 @@ function Courses({
                   }}
                 >
                   <Download size={13} /> 导出全部实训
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSolve(c);
+                  }}
+                >
+                  <Wand2 size={13} /> AI 做实验
                 </button>
                 <button
                   className="btn btn-sm btn-primary"

@@ -5,7 +5,15 @@ import { createContext, useContext } from "react";
 
 import type { CookieStatus, UserInfo } from "./types";
 
-export type Page = "account" | "browse" | "export" | "report" | "aireport" | "tasks" | "api";
+export type Page =
+  | "account"
+  | "browse"
+  | "export"
+  | "report"
+  | "aireport"
+  | "aisolve"
+  | "tasks"
+  | "api";
 
 export interface Selection {
   courseId?: string;

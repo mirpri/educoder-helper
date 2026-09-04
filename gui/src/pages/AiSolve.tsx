@@ -1,19 +1,19 @@
-// 实验报告页：勾选整门课程里要写进报告的关卡，粘贴任务书 / 实验要求 / 报告模板，
-// 交给 AI 逐个实训起草，拼成一份 报告.md，并把每关的题目与代码存成素材文件。
+// AI 做实验页：勾选课程里要做的关卡，AI 读取任务描述和仓库里已有的代码，
+// 给出能通过测评、可以直接复制粘贴提交的完整代码文件。
 import { useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Folder, FolderOpen, ListTree, Sparkles, X } from "lucide-react";
+import { AlertTriangle, Folder, FolderOpen, ListTree, Wand2, X } from "lucide-react";
 
 import { AiBackendPicker, backendReady } from "../AiBackendPicker";
 import * as api from "../api";
-import { ChallengeTree, allGameIds, selectedHomeworks } from "../ChallengeTree";
+import { ChallengeTree, selectedHomeworks } from "../ChallengeTree";
 import { useApp } from "../context";
 import { useTasks } from "../tasks";
-import type { BackendConfig, DetectedClis, ReportResult, ReportTree } from "../types";
+import type { BackendConfig, DetectedClis, ReportTree, SolveResult } from "../types";
 import { Badge, Empty, ErrorBox, Field, Spinner } from "../ui";
 
-export default function AiReport() {
+export default function AiSolve() {
   const { goto, selection } = useApp();
 
   const [courseId, setCourseId] = useState(selection.courseId ?? "");
@@ -21,9 +21,7 @@ export default function AiReport() {
   const [loadingTree, setLoadingTree] = useState(false);
   const [picked, setPicked] = useState<Set<string>>(new Set());
 
-  const [taskBook, setTaskBook] = useState("");
   const [requirements, setRequirements] = useState("");
-  const [template, setTemplate] = useState("");
 
   const [backend, setBackend] = useState<BackendConfig>({
     kind: "api",
@@ -36,17 +34,17 @@ export default function AiReport() {
   const [dest, setDest] = useState("");
   const [folder, setFolder] = useState("");
 
-  const [result, setResult] = useState<ReportResult | null>(null);
+  const [result, setResult] = useState<SolveResult | null>(null);
   const [error, setError] = useState<api.ApiError | null>(null);
   const logRef = useRef<HTMLPreElement>(null);
 
   // 进度来自全局任务，切到别的页面再回来照样能看到。
   const tasks = useTasks();
-  const task = tasks.running("report") ?? tasks.running("tree");
-  const running = tasks.running("report") !== undefined;
+  const task = tasks.running("solve") ?? tasks.running("tree");
+  const running = tasks.running("solve") !== undefined;
   const log = task?.log ?? [];
 
-  // 上次用过的接口设置（API Key 只在用户勾了「记住」时才回填）。
+  // 复用「实验报告」页记住的同一套接口设置。
   useEffect(() => {
     void api
       .aiSettings()
@@ -71,9 +69,7 @@ export default function AiReport() {
         api.reportTree(courseId.trim()),
       );
       setTree(t);
-      // 默认全选：多数人是整门课程写报告，取消比逐个勾更省事。
-      setPicked(allGameIds(t));
-      if (!folder.trim()) setFolder(`${t.courseName}-实践报告`);
+      if (!folder.trim()) setFolder(`${t.courseName}-AI答案`);
     } catch (e) {
       setError(api.toApiError(e));
     } finally {
@@ -81,11 +77,7 @@ export default function AiReport() {
     }
   }
 
-  const selected = useMemo(
-    () => (tree ? selectedHomeworks(tree, picked) : []),
-    [tree, picked],
-  );
-
+  const selected = useMemo(() => (tree ? selectedHomeworks(tree, picked) : []), [tree, picked]);
   const totalPicked = selected.reduce((n, h) => n + h.challenges.length, 0);
 
   async function start() {
@@ -94,22 +86,20 @@ export default function AiReport() {
     try {
       await api.saveAiSettings(backend, remember).catch(() => undefined);
       const r = await tasks.run(
-        "report",
-        `生成报告 · ${tree?.courseName ?? ""}`,
+        "solve",
+        `AI 做实验 · ${tree?.courseName ?? ""}`,
         () =>
-          api.generateReport(
+          api.solveSelection(
             {
               courseName: tree?.courseName ?? "",
               dest,
               folder: folder.trim() || null,
               homeworks: selected,
-              taskBook,
               requirements,
-              template,
             },
             backend,
           ),
-        (r) => r.file,
+        (r) => r.summaryFile,
       );
       setResult(r);
     } catch (e) {
@@ -122,11 +112,12 @@ export default function AiReport() {
   return (
     <div className="page">
       <header className="page-head">
-        <h1>实验报告</h1>
+        <h1>AI 做实验</h1>
         <p className="muted">
-          勾选要写进报告的关卡，粘贴任务书与报告模板，AI 会按「课程任务概述 / 任务实施过程与分析 /
-          课程总结」的结构逐节起草，并把每关的题目和你的代码另存为素材。
-          需要截图和运行结果的地方会留占位符，<strong>成稿前请务必自己通读核对</strong>。
+          勾选要做的关卡，AI 会读取每一关的任务描述和仓库里已有的代码，逐关给出完整代码。
+          除了按关卡分开保存的文件，根目录下还会有一份 <span className="mono">答案汇总.md</span>
+          ，把所有关卡的代码按顺序整理成一个文件，方便直接复制粘贴。
+          <strong>这是 AI 的初稿，提交前请自己通读核对</strong>。
         </p>
       </header>
 
@@ -171,40 +162,20 @@ export default function AiReport() {
 
       <section className="card">
         <div className="card-head">
-          <h2>2 · 粘贴材料</h2>
-          <span className="muted small">都可留空，但给得越全，生成的报告越贴合要求</span>
+          <h2>2 · 额外要求</h2>
+          <span className="muted small">可留空</span>
         </div>
         <div className="form-grid">
-          <Field label="课程任务书" hint="课程发的任务书全文，AI 据此理解每个实训的背景与要求。">
-            <textarea
-              className="input textarea"
-              rows={6}
-              value={taskBook}
-              onChange={(e) => setTaskBook(e.target.value)}
-              placeholder="粘贴任务书正文…"
-              disabled={running}
-            />
-          </Field>
-          <Field label="实验 / 报告要求" hint="对篇幅、重点关卡数量、必写小节等的额外要求。">
-            <textarea
-              className="input textarea"
-              rows={5}
-              value={requirements}
-              onChange={(e) => setRequirements(e.target.value)}
-              placeholder="粘贴实验要求…"
-              disabled={running}
-            />
-          </Field>
           <Field
-            label="报告模板"
-            hint="粘贴学院给的报告模板。只用来确定章节结构，字体、行距、页码这类排版要求会被忽略。"
+            label="额外要求"
+            hint="例如指定语言版本、禁止用某些语法、代码风格要求等，会随每一关的材料一起发给 AI。"
           >
             <textarea
               className="input textarea"
-              rows={6}
-              value={template}
-              onChange={(e) => setTemplate(e.target.value)}
-              placeholder="粘贴报告模板…"
+              rows={4}
+              value={requirements}
+              onChange={(e) => setRequirements(e.target.value)}
+              placeholder="留空即可…"
               disabled={running}
             />
           </Field>
@@ -230,7 +201,7 @@ export default function AiReport() {
           <h2>4 · 输出</h2>
         </div>
         <div className="form-grid">
-          <Field label="保存到" hint="会在该目录下建一个子文件夹，放 报告.md、images/ 和 素材/。">
+          <Field label="保存到" hint="会在该目录下建一个子文件夹，按「实训/关卡」两级存放题目和代码文件。">
             <div className="input-row">
               <input
                 className="input mono"
@@ -268,17 +239,15 @@ export default function AiReport() {
 
         <div className="btn-row">
           <button className="btn btn-primary" onClick={() => void start()} disabled={!canStart}>
-            {running ? <Spinner /> : <Sparkles size={14} />} 开始生成
+            {running ? <Spinner /> : <Wand2 size={14} />} 开始生成
           </button>
           {running ? (
-            <button className="btn btn-danger" onClick={() => void api.cancelReport()}>
+            <button className="btn btn-danger" onClick={() => void api.cancelSolve()}>
               <X size={14} /> 取消
             </button>
           ) : null}
           {!running && totalPicked > 0 ? (
-            <span className="muted small">
-              将调用 AI 约 {selected.length + 3} 次（{selected.length} 个小节 + 绪言 + 第 1、3 章）
-            </span>
+            <span className="muted small">将调用 AI 约 {totalPicked} 次，每关一次</span>
           ) : null}
         </div>
       </section>
@@ -301,43 +270,56 @@ export default function AiReport() {
   );
 }
 
-function ResultCard({ result }: { result: ReportResult }) {
+function ResultCard({ result }: { result: SolveResult }) {
   return (
     <section className="card">
       <div className="card-head">
         <h2>生成完成</h2>
-        <button className="btn btn-sm" onClick={() => void revealItemInDir(result.file)}>
+        <button className="btn btn-sm btn-primary" onClick={() => void revealItemInDir(result.summaryFile)}>
+          <FolderOpen size={13} /> 打开答案汇总.md
+        </button>
+        <button className="btn btn-sm" onClick={() => void revealItemInDir(result.dir)}>
           <FolderOpen size={13} /> 打开文件夹
         </button>
       </div>
-      <p className="mono wrap">{result.file}</p>
+      <p className="mono wrap">{result.summaryFile}</p>
 
       <ul className="plain-list">
         <li>
-          正文 <Badge tone="ok">{result.sections} 个小节</Badge>
+          成功 <Badge tone="ok">{result.solved} 关</Badge>
+          {result.failed > 0 ? (
+            <>
+              {" "}
+              失败 <Badge tone="error">{result.failed} 关</Badge>
+            </>
+          ) : null}
         </li>
-        <li>
-          素材 <Badge tone="ok">{result.materials} 个关卡</Badge>
-        </li>
-        <li>
-          待你补充 <Badge tone={result.placeholders > 0 ? "warn" : "ok"}>
-            {result.placeholders} 处截图 / 运行结果
-          </Badge>
-        </li>
-        {result.failed.length > 0 ? (
-          <li>
-            生成失败 <Badge tone="error">{result.failed.join("、")}</Badge>
-            <span className="muted small block">
-              这些小节在正文里留了提示，素材已存好，可以手动补写或重新生成。
-            </span>
-          </li>
-        ) : null}
       </ul>
 
-      <p className="muted small">
-        报告是 AI 起草的初稿：请逐节核对代码与描述是否与你实际提交的一致，补齐 🖼️ / 📋
-        占位符，并填写封面的个人信息后再提交。
-      </p>
+      <ul className="rows">
+        {result.challenges.map((c, i) => (
+          <li key={`${c.name}-${i}`} className="row">
+            <div className="row-main">
+              <div className="row-title">
+                {c.name}
+                {c.error ? <Badge tone="error">失败</Badge> : <Badge tone="ok">{c.files.length} 个文件</Badge>}
+              </div>
+              {c.error ? (
+                <div className="row-meta muted small">{c.error}</div>
+              ) : (
+                <div className="row-meta mono small">{c.files.join("、")}</div>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      <div className="notice notice-warn">
+        <AlertTriangle size={14} />
+        <span className="notice-body">
+          AI 给出的代码不保证一定能通过测评：请对照任务描述逐关核对，确认理解代码内容后再复制提交到平台。
+        </span>
+      </div>
     </section>
   );
 }

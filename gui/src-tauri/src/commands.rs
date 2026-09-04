@@ -16,6 +16,7 @@ use crate::exporter::{
     self, ChallengeResult, CourseResult, ImageMode, Progress, SelectedHomework, ShixunResult,
 };
 use crate::report::{self, ReportRequest, ReportResult, ReportTree};
+use crate::solve::{self, SolveRequest, SolveResult};
 use crate::state::{self, AppState, CookieStatus};
 
 // ---- Account / cookies ----
@@ -519,4 +520,64 @@ pub fn is_generating(state: State<'_, AppState>) -> bool {
 #[tauri::command]
 pub fn detect_cli_backends() -> DetectedClis {
     cli::detect()
+}
+
+// ---- AI 做实验 ----
+
+/// One AI call per selected 关卡: fetch its task + current code, ask the model
+/// to solve it, save the resulting files. Progress streams as `solve:log`.
+#[tauri::command]
+pub async fn solve_selection(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    request: SolveRequest,
+    ai: BackendConfig,
+) -> Result<SolveResult> {
+    if state.solving.swap(true, Ordering::SeqCst) {
+        return Err(Error::msg("已有 AI 做实验任务在进行中"));
+    }
+    state.solve_cancel.store(false, Ordering::SeqCst);
+    state.set_session_api_key(Some(ai.api.api_key.clone()));
+
+    let finish = |state: &State<'_, AppState>, app: &AppHandle, ok: bool| {
+        state.solving.store(false, Ordering::SeqCst);
+        let _ = app.emit("solve:done", ok);
+    };
+
+    let client = match state.client() {
+        Ok(c) => c,
+        Err(e) => {
+            finish(&state, &app, false);
+            return Err(e);
+        }
+    };
+    let ai_client = match ChatBackend::new(ai, state.solve_cancel.clone()) {
+        Ok(c) => c,
+        Err(e) => {
+            finish(&state, &app, false);
+            return Err(e);
+        }
+    };
+
+    let handle = app.clone();
+    let progress = Progress::new(
+        Box::new(move |m: &str| {
+            let _ = handle.emit("solve:log", m.to_string());
+        }),
+        state.solve_cancel.clone(),
+    );
+
+    let result = solve::solve(&client, &ai_client, &request, &progress).await;
+    finish(&state, &app, result.is_ok());
+    result
+}
+
+#[tauri::command]
+pub fn cancel_solve(state: State<'_, AppState>) {
+    state.solve_cancel.store(true, Ordering::SeqCst);
+}
+
+#[tauri::command]
+pub fn is_solving(state: State<'_, AppState>) -> bool {
+    state.solving.load(Ordering::SeqCst)
 }
